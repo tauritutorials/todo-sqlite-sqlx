@@ -1,6 +1,6 @@
 use futures::TryStreamExt;
 use serde::{Deserialize, Serialize};
-use sqlx::{prelude::FromRow, sqlite::SqlitePoolOptions, Pool, Sqlite};
+use sqlx::{migrate::MigrateDatabase, prelude::FromRow, sqlite::SqlitePoolOptions, Pool, Sqlite};
 use std::fs::OpenOptions;
 use tauri::{App, Manager as _};
 
@@ -11,7 +11,7 @@ struct AppState {
 }
 
 pub fn run() {
-    let app = tauri::Builder::default()
+     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
         .invoke_handler(tauri::generate_handler![
             add_todo,
@@ -27,16 +27,14 @@ pub fn run() {
             });
             Ok(())
         })
-        .build(tauri::generate_context!())
+        .run(tauri::generate_context!())
         .expect("error building the app");
 
-    app.run(|_, _| {});
 }
 
 async fn setup_db(app: &App) -> Db {
-    let mut path = app.path().app_data_dir().expect("could not get data_dir");
+    let mut path = app.path().app_data_dir().expect("failed to get data_dir");
 
-    // try to create application data directory if it doesn't exist
     match std::fs::create_dir_all(path.clone()) {
         Ok(_) => {}
         Err(err) => {
@@ -46,17 +44,15 @@ async fn setup_db(app: &App) -> Db {
 
     path.push("db.sqlite");
 
-    let result = OpenOptions::new().create_new(true).write(true).open(&path);
-
-    match result {
-        Ok(_) => println!("database file created"),
-        Err(err) => match err.kind() {
-            std::io::ErrorKind::AlreadyExists => println!("database file already exists"),
-            _ => {
-                panic!("error creating databse file {}", err);
-            }
-        },
-    }
+    Sqlite::create_database(
+        format!(
+            "sqlite:{}",
+            path.to_str().expect("path should be something")
+        )
+        .as_str(),
+    )
+    .await
+    .expect("failed to create database");
 
     let db = SqlitePoolOptions::new()
         .connect(path.to_str().unwrap())
